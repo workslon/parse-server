@@ -129,6 +129,22 @@ describe('miscellaneous', function() {
     });
   });
 
+  it('query without limit get default 100 records', function(done) {
+    var objects = [];
+    for (var i = 0; i < 150; i++) {
+      objects.push(new TestObject({name: 'name' + i}));
+    }
+    Parse.Object.saveAll(objects).then(() => {
+      return new Parse.Query(TestObject).find();
+    }).then((results) => {
+      expect(results.length).toEqual(100);
+    done();
+    }, (error) => {
+      fail(error);
+      done();
+    });
+  });
+
   it('basic saveAll', function(done) {
     var alpha = new TestObject({ letter: 'alpha' });
     var beta = new TestObject({ letter: 'beta' });
@@ -572,12 +588,41 @@ describe('miscellaneous', function() {
     });
   });
 
+  it('test cloud function query parameters', (done) => {
+    Parse.Cloud.define('echoParams', (req, res) => {
+      res.success(req.params);
+    });
+    var headers = {
+      'Content-Type': 'application/json',
+      'X-Parse-Application-Id': 'test',
+      'X-Parse-Javascript-Key': 'test'
+    };
+    request.post({
+      headers: headers,
+      url: 'http://localhost:8378/1/functions/echoParams', //?option=1&other=2
+      qs: {
+        option: 1,
+        other: 2
+      },
+      body: '{"foo":"bar", "other": 1}'
+    }, (error, response, body) => {
+      expect(error).toBe(null);
+      var res = JSON.parse(body).result;
+      expect(res.option).toEqual('1');
+      // Make sure query string params override body params
+      expect(res.other).toEqual('2');
+      expect(res.foo).toEqual("bar");
+      delete Parse.Cloud.Functions['echoParams'];
+      done();
+    });
+  });
+
   it('test cloud function parameter validation success', (done) => {
     // Register a function with validation
     Parse.Cloud.define('functionWithParameterValidation', (req, res) => {
       res.success('works');
-    }, (params) => {
-      return params.success === 100;
+    }, (request) => {
+      return request.params.success === 100;
     });
 
     Parse.Cloud.run('functionWithParameterValidation', {"success":100}).then((s) => {
@@ -593,8 +638,8 @@ describe('miscellaneous', function() {
     // Register a function with validation
     Parse.Cloud.define('functionWithParameterValidationFailure', (req, res) => {
       res.success('noway');
-    }, (params) => {
-      return params.success === 100;
+    }, (request) => {
+      return request.params.success === 100;
     });
 
     Parse.Cloud.run('functionWithParameterValidationFailure', {"success":500}).then((s) => {
@@ -672,6 +717,17 @@ describe('miscellaneous', function() {
       expect(error).toBe(null);
       var b = JSON.parse(body);
       expect(b.error).toEqual('unauthorized');
+      done();
+    });
+  });
+
+  it('fails on invalid function', done => {
+    Parse.Cloud.run('somethingThatDoesDefinitelyNotExist').then((s) => {
+      fail('This should have never suceeded');
+      done();
+    }, (e) => {
+      expect(e.code).toEqual(Parse.Error.SCRIPT_FAILED);
+      expect(e.message).toEqual('Invalid function.');
       done();
     });
   });
