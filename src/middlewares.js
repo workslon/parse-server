@@ -170,9 +170,6 @@ var handleParseErrors = function(err, req, res, next) {
     case Parse.Error.OBJECT_NOT_FOUND:
       httpStatus = 404;
       break;
-    case Parse.Error.SCRIPT_FAILED:
-      httpStatus = 141;
-      break;
     default:
       httpStatus = 400;
     }
